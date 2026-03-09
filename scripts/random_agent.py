@@ -30,12 +30,36 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import gymnasium as gym
+import numpy as np
 import torch
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
 
 import Soccer_Lab.tasks  # noqa: F401
+
+
+def _sample_from_space(space: gym.Space, num_envs: int, device: str) -> torch.Tensor:
+    if not hasattr(space, "shape") or space.shape is None:
+        raise TypeError(f"Unsupported action space type for random agent: {type(space)}")
+
+    tensor_shape = (num_envs, *tuple(space.shape))
+    if getattr(space, "dtype", None) is not None and np.issubdtype(space.dtype, np.integer):
+        return torch.zeros(tensor_shape, device=device, dtype=torch.long)
+    return 2 * torch.rand(tensor_shape, device=device) - 1
+
+
+def _build_random_actions(env) -> torch.Tensor | dict[str, torch.Tensor]:
+    unwrapped_env = env.unwrapped
+    num_envs = getattr(unwrapped_env, "num_envs", 1)
+    device = unwrapped_env.device
+
+    if hasattr(unwrapped_env, "possible_agents") and hasattr(unwrapped_env, "action_spaces"):
+        return {
+            agent: _sample_from_space(unwrapped_env.action_spaces[agent], num_envs=num_envs, device=device)
+            for agent in unwrapped_env.possible_agents
+        }
+    return _sample_from_space(env.action_space, num_envs=num_envs, device=device)
 
 
 def main():
@@ -48,8 +72,12 @@ def main():
     env = gym.make(args_cli.task, cfg=env_cfg)
 
     # print info (this is vectorized environment)
-    print(f"[INFO]: Gym observation space: {env.observation_space}")
-    print(f"[INFO]: Gym action space: {env.action_space}")
+    if hasattr(env.unwrapped, "possible_agents") and hasattr(env.unwrapped, "action_spaces"):
+        print(f"[INFO]: MARL observation spaces: {env.unwrapped.observation_spaces}")
+        print(f"[INFO]: MARL action spaces: {env.unwrapped.action_spaces}")
+    else:
+        print(f"[INFO]: Gym observation space: {env.observation_space}")
+        print(f"[INFO]: Gym action space: {env.action_space}")
     # reset environment
     env.reset()
     # simulate environment
@@ -57,7 +85,7 @@ def main():
         # run everything in inference mode
         with torch.inference_mode():
             # sample actions from -1 to 1
-            actions = 2 * torch.rand(env.action_space.shape, device=env.unwrapped.device) - 1
+            actions = _build_random_actions(env)
             # apply actions
             env.step(actions)
 
@@ -66,7 +94,9 @@ def main():
 
 
 if __name__ == "__main__":
-    # run the main function
-    main()
-    # close sim app
-    simulation_app.close()
+    try:
+        # run the main function
+        main()
+    finally:
+        # close sim app even if stepping fails
+        simulation_app.close()

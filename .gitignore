@@ -19,8 +19,18 @@
 **/*.egg-info/
 **/__pycache__/
 **/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.hypothesis/
+**/.ipynb_checkpoints/
+**/.cache/
 **/*.pyc
+**/*.pyo
+**/*.pyd
 **/*.pb
+.coverage
+.coverage.*
+htmlcov/
 
 # Docker/Singularity
 **/*.sif
