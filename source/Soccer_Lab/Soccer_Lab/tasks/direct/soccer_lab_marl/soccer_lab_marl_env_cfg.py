@@ -12,7 +12,7 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import CameraCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
-from isaaclab_assets import G1_CFG
+from Soccer_Lab.g1_asset import G1_COMP_CFG
 
 from .field_specs import get_field_preset
 from .layout import DEFAULT_G1_AGENT_ORDER
@@ -46,14 +46,14 @@ class SoccerLabMarlEnvCfg(DirectMARLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1, env_spacing=30.0, replicate_physics=True)
 
     # robot
-    g1_robot_cfg: ArticulationCfg = G1_CFG.replace(prim_path="/World/envs/env_.*/G1")
+    g1_robot_cfg: ArticulationCfg = G1_COMP_CFG.replace(prim_path="/World/envs/env_.*/G1")
     # Control all articulated joints by default.
     # You can also provide a custom subset of joint names if needed.
     controlled_joint_names = ["__all__"]
     action_scale = 0.35
     fall_height_threshold = 0.42
 
-    # onboard cameras (mounted per robot)
+    # onboard D455 cameras (mounted per robot on the head-top camera link)
     enable_robot_cameras = True
     robot_camera_cfg: CameraCfg = CameraCfg(
         prim_path="/World/envs/env_.*/RobotCamera",
@@ -66,9 +66,9 @@ class SoccerLabMarlEnvCfg(DirectMARLEnvCfg):
             clipping_range=(0.1, 20.0),
         ),
         offset=CameraCfg.OffsetCfg(
-            # Mounted on torso_link with a slight forward offset and downward pitch.
-            pos=(0.10, 0.0, 0.08),
-            rot=(0.9848078, 0.0, -0.1736482, 0.0),
+            # Mounted directly on d455_link using the original URDF pose.
+            pos=(0.0, 0.0, 0.0),
+            rot=(1.0, 0.0, 0.0, 0.0),
             convention="world",
         ),
     )

@@ -8,6 +8,7 @@ Python module serving as a project/extension template.
 """
 
 # Register Gym environments.
+from .g1_asset import *
 from .tasks import *
 
 # Register UI extensions.

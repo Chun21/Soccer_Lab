@@ -127,7 +127,7 @@ class SoccerLabMarlEnv(DirectMARLEnv):
             for agent_name in self.cfg.possible_agents:
                 camera_prim_name = f"{agent_name.upper()}Camera"
                 camera_cfg = self.cfg.robot_camera_cfg.replace(
-                    prim_path=f"/World/envs/env_.*/{agent_name.upper()}/torso_link/{camera_prim_name}"
+                    prim_path=f"/World/envs/env_.*/{agent_name.upper()}/d455_link/{camera_prim_name}"
                 )
                 self.robot_cameras[agent_name] = Camera(camera_cfg)
 
