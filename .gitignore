@@ -73,7 +73,11 @@ _build
 
 # Tests
 tests/
+!source/Soccer_Lab/tests/
+!source/Soccer_Lab/tests/*.py
 
 # Docker history
 .isaac-lab-docker-history
 .vscode/
+
+/docs/

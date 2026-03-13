@@ -54,3 +54,25 @@ def compute_g1_team_poses(
     poses["b4"] = (forward_x_offset, 0.0, base_height, math.pi)  # forward
 
     return poses
+
+
+def compute_single_g1_spawn_pose(
+    field_size: tuple[float, float],
+    team_spacing: tuple[float, float],
+    base_height: float,
+    spawn_reference_agent: str = "a4",
+    single_agent_name: str = "a1",
+) -> dict[str, tuple[float, float, float, float]]:
+    """Map a single-agent task spawn pose to one of the standard 4v4 reference poses."""
+
+    team_poses = compute_g1_team_poses(
+        field_size=field_size,
+        team_spacing=team_spacing,
+        base_height=base_height,
+    )
+    if spawn_reference_agent not in team_poses:
+        raise ValueError(
+            f"Unknown single-agent spawn reference '{spawn_reference_agent}'. "
+            f"Available references: {sorted(team_poses.keys())}"
+        )
+    return {single_agent_name: team_poses[spawn_reference_agent]}

@@ -36,11 +36,7 @@ class SoccerLabMarlEnv(DirectMARLEnv):
         )
         self._refresh_agent_spaces()
 
-        team_poses = compute_g1_team_poses(
-            field_size=self.cfg.field_size,
-            team_spacing=self.cfg.team_spacing,
-            base_height=self.cfg.spawn_height,
-        )
+        team_poses = self._build_spawn_poses()
         if set(team_poses.keys()) != set(self.agent_names):
             raise RuntimeError("Team pose layout does not match configured agent names.")
 
@@ -69,6 +65,15 @@ class SoccerLabMarlEnv(DirectMARLEnv):
         self._ball_spawn_offset = torch.tensor([0.0, 0.0, ball_height], dtype=torch.float, device=self.device)
         self._ball_spawn_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float, device=self.device)
         self._logged_spawn_info = False
+
+    def _build_spawn_poses(self) -> dict[str, tuple[float, float, float, float]]:
+        """Build robot spawn poses keyed by agent name."""
+
+        return compute_g1_team_poses(
+            field_size=self.cfg.field_size,
+            team_spacing=self.cfg.team_spacing,
+            base_height=self.cfg.spawn_height,
+        )
 
     def _setup_scene(self):
         if self.cfg.spawn_pitch_base:
