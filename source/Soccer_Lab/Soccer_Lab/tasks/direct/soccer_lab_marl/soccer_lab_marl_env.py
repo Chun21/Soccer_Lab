@@ -14,6 +14,7 @@ from isaaclab.assets import Articulation, RigidObject
 from isaaclab.envs import DirectMARLEnv
 from isaaclab.sensors import Camera
 
+from ..soccer_single_g1.g1_motion_policy import G1MotionPolicyController
 from .field_specs import build_field_line_specs, build_goal_post_specs, get_field_preset
 from .layout import compute_g1_team_poses
 from .soccer_lab_marl_env_cfg import SoccerLabMarlEnvCfg
@@ -60,6 +61,22 @@ class SoccerLabMarlEnv(DirectMARLEnv):
         self._joint_pos_target = {
             name: robot.data.default_joint_pos.clone() for name, robot in self.robots.items()
         }
+        self._motion_controllers: dict[str, G1MotionPolicyController] = {}
+        self._policy_leg_joint_targets = {
+            agent_name: robot.data.default_joint_pos[:, self.control_joint_ids].clone()
+            for agent_name, robot in self.robots.items()
+        }
+        self._upper_body_hold_joint_ids, self._upper_body_hold_joint_pos = self._resolve_upper_body_hold_targets()
+        if getattr(self.cfg, "use_unitree_rl_policy", False):
+            if self.num_envs != 1:
+                raise RuntimeError(
+                    "SoccerLabMarlEnv currently supports unitree_rl_gym policy only with num_envs == 1, "
+                    f"got {self.num_envs}."
+                )
+            self._motion_controllers = {
+                agent_name: self._create_motion_policy_controller() for agent_name in self.agent_names
+            }
+        self._reset_motion_policy()
 
         ball_height = self.cfg.ball_cfg.init_state.pos[2]
         self._ball_spawn_offset = torch.tensor([0.0, 0.0, ball_height], dtype=torch.float, device=self.device)
@@ -158,11 +175,31 @@ class SoccerLabMarlEnv(DirectMARLEnv):
         light_cfg.func("/World/Light", light_cfg)
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
+        if self._should_use_motion_policy():
+            for agent_name in self.agent_names:
+                if agent_name in actions:
+                    self.actions[agent_name] = actions[agent_name]
+                self._policy_leg_joint_targets[agent_name][:] = self._infer_motion_policy_targets(agent_name)
+            return
+
         for agent_name in self.agent_names:
             if agent_name in actions:
                 self.actions[agent_name] = actions[agent_name]
 
     def _apply_action(self) -> None:
+        if self._should_use_motion_policy():
+            for agent_name, robot in self.robots.items():
+                full_body_target = self._compose_full_body_target(
+                    base_target=self._default_joint_pos[agent_name],
+                    leg_joint_ids=self.control_joint_ids,
+                    leg_joint_targets=self._policy_leg_joint_targets[agent_name],
+                    hold_joint_ids=self._upper_body_hold_joint_ids,
+                    hold_joint_targets=self._upper_body_hold_joint_pos,
+                )
+                self._joint_pos_target[agent_name][:] = full_body_target
+                robot.set_joint_position_target(self._joint_pos_target[agent_name])
+            return
+
         for agent_name, robot in self.robots.items():
             clipped_actions = torch.clamp(self.actions[agent_name], -1.0, 1.0)
             target = self._joint_pos_target[agent_name]
@@ -250,6 +287,8 @@ class SoccerLabMarlEnv(DirectMARLEnv):
             print(f"[INFO]: G1 spawn positions (env_0): {spawn_preview}")
             self._logged_spawn_info = True
 
+        self._reset_motion_policy()
+
     @staticmethod
     def _resolve_control_joint_ids(robot: Articulation, expected_joint_names: list[str] | None) -> list[int]:
         if expected_joint_names is None or len(expected_joint_names) == 0:
@@ -270,6 +309,94 @@ class SoccerLabMarlEnv(DirectMARLEnv):
         self.cfg.action_spaces = {agent: action_dim for agent in self.agent_names}
         self.cfg.observation_spaces = {agent: obs_dim for agent in self.agent_names}
         self._configure_env_spaces()
+
+    def _create_motion_policy_controller(self) -> G1MotionPolicyController:
+        return G1MotionPolicyController(
+            policy_path=self.cfg.unitree_rl_policy_path,
+            device=self.device,
+            control_dt=self.cfg.unitree_rl_control_dt,
+            gait_period=self.cfg.unitree_rl_gait_period,
+            action_scale=self.cfg.unitree_rl_action_scale,
+            ang_vel_scale=self.cfg.unitree_rl_ang_vel_scale,
+            dof_pos_scale=self.cfg.unitree_rl_dof_pos_scale,
+            dof_vel_scale=self.cfg.unitree_rl_dof_vel_scale,
+            cmd=self.cfg.unitree_rl_cmd,
+            cmd_scale=self.cfg.unitree_rl_cmd_scale,
+            default_angles=self.cfg.unitree_rl_default_angles,
+        )
+
+    def _get_motion_controllers(self) -> dict[str, G1MotionPolicyController]:
+        controllers = getattr(self, "_motion_controllers", None)
+        if controllers:
+            return controllers
+
+        legacy_controller = getattr(self, "_motion_controller", None)
+        if legacy_controller is not None and len(getattr(self, "agent_names", [])) == 1:
+            return {self.agent_names[0]: legacy_controller}
+        return {}
+
+    def _should_use_motion_policy(self) -> bool:
+        return bool(getattr(self.cfg, "use_unitree_rl_policy", False) and self._get_motion_controllers())
+
+    def _resolve_upper_body_hold_targets(self) -> tuple[list[int], torch.Tensor]:
+        if not self.agent_names:
+            return [], torch.empty(0, dtype=torch.float32, device=self.device)
+
+        robot = self.robots[self.agent_names[0]]
+        hold_joint_pos = getattr(self.cfg, "upper_body_hold_joint_pos", {})
+        hold_joint_names = [joint_name for joint_name in hold_joint_pos if joint_name in robot.joint_names]
+        hold_joint_ids = [robot.joint_names.index(joint_name) for joint_name in hold_joint_names]
+        hold_joint_targets = torch.tensor(
+            [hold_joint_pos[joint_name] for joint_name in hold_joint_names],
+            dtype=torch.float32,
+            device=self.device,
+        )
+        return hold_joint_ids, hold_joint_targets
+
+    def _reset_motion_policy(self) -> None:
+        if not self._should_use_motion_policy():
+            return
+
+        for agent_name, controller in self._get_motion_controllers().items():
+            controller.reset()
+            default_targets = controller.default_angles.unsqueeze(0)
+            if agent_name in self._policy_leg_joint_targets:
+                self._policy_leg_joint_targets[agent_name][:] = default_targets
+
+    def _infer_motion_policy_targets(self, agent_name: str) -> torch.Tensor:
+        controller = self._get_motion_controllers()[agent_name]
+        robot = self.robots[agent_name]
+        leg_joint_targets = controller.infer(
+            base_ang_vel_b=robot.data.root_ang_vel_b[0],
+            projected_gravity_b=robot.data.projected_gravity_b[0],
+            joint_pos=robot.data.joint_pos[0, self.control_joint_ids],
+            joint_vel=robot.data.joint_vel[0, self.control_joint_ids],
+        )
+        if leg_joint_targets.ndim == 1:
+            leg_joint_targets = leg_joint_targets.unsqueeze(0)
+        return leg_joint_targets
+
+    @staticmethod
+    def _compose_full_body_target(
+        *,
+        base_target: torch.Tensor,
+        leg_joint_ids: list[int],
+        leg_joint_targets: torch.Tensor,
+        hold_joint_ids: list[int],
+        hold_joint_targets: torch.Tensor,
+    ) -> torch.Tensor:
+        target = base_target.clone()
+
+        if leg_joint_targets.ndim == 1:
+            leg_joint_targets = leg_joint_targets.unsqueeze(0)
+        target[:, leg_joint_ids] = leg_joint_targets
+
+        if len(hold_joint_ids) > 0:
+            if hold_joint_targets.ndim == 1:
+                hold_joint_targets = hold_joint_targets.unsqueeze(0).expand(target.shape[0], -1)
+            target[:, hold_joint_ids] = hold_joint_targets
+
+        return target
 
 
 def yaw_to_quat_wxyz(yaw: float) -> tuple[float, float, float, float]:

@@ -11,8 +11,14 @@ from .soccer_single_g1_env_cfg import SoccerSingleG1EnvCfg
 
 
 class SoccerSingleG1Env(SoccerLabMarlEnv):
+    """单机器人 G1 足球环境，支持内嵌 unitree_rl_gym 站立策略。"""
 
     cfg: SoccerSingleG1EnvCfg
+
+    def __init__(self, cfg: SoccerSingleG1EnvCfg, render_mode: str | None = None, **kwargs):
+        super().__init__(cfg, render_mode, **kwargs)
+        controllers = self._get_motion_controllers()
+        self._motion_controller = controllers.get(self.agent_names[0]) if self.agent_names else None
 
     def _build_spawn_poses(self) -> dict[str, tuple[float, float, float, float]]:
         if len(self.cfg.possible_agents) != 1:
