@@ -72,9 +72,7 @@ _build
 /datasets/
 
 # Tests
-tests/
-!source/Soccer_Lab/tests/
-!source/Soccer_Lab/tests/*.py
+**/tests/
 
 # Docker history
 .isaac-lab-docker-history
