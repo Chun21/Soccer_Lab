@@ -15,7 +15,7 @@ from isaaclab.envs import DirectMARLEnv
 from isaaclab.sensors import Camera
 
 from ..soccer_single_g1.g1_motion_policy import G1MotionPolicyController
-from .field_specs import build_field_line_specs, build_goal_post_specs, get_field_preset
+from .field_specs import build_field_line_specs, build_goal_asset_specs, build_goal_post_specs, get_field_preset
 from .layout import compute_g1_team_poses
 from .soccer_lab_marl_env_cfg import SoccerLabMarlEnvCfg
 
@@ -138,6 +138,9 @@ class SoccerLabMarlEnv(DirectMARLEnv):
                     rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
                 )
                 post_cfg.func(f"/World/envs/env_.*/Goal_{post.name}", post_cfg, translation=post.position)
+
+        if getattr(self.cfg, "spawn_goal_asset", False):
+            self._spawn_goal_assets()
 
         self.robots: dict[str, Articulation] = {}
         for agent_name in self.cfg.possible_agents:
@@ -324,6 +327,21 @@ class SoccerLabMarlEnv(DirectMARLEnv):
             cmd_scale=self.cfg.unitree_rl_cmd_scale,
             default_angles=self.cfg.unitree_rl_default_angles,
         )
+
+    def _spawn_goal_assets(self) -> None:
+        goal_asset_cfg = sim_utils.UsdFileCfg(
+            usd_path=self.cfg.goal_asset_path,
+            scale=self.cfg.goal_asset_scale,
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=self.cfg.goal_asset_collision_enabled),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
+        )
+        for goal_asset in build_goal_asset_specs(self.field_cfg, z_offset=self.cfg.goal_asset_z_offset):
+            goal_asset_cfg.func(
+                f"/World/envs/env_.*/{goal_asset.name}",
+                goal_asset_cfg,
+                translation=goal_asset.position,
+                orientation=goal_asset.orientation,
+            )
 
     def _get_motion_controllers(self) -> dict[str, G1MotionPolicyController]:
         controllers = getattr(self, "_motion_controllers", None)

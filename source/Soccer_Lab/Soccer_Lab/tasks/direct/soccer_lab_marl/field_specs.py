@@ -115,6 +115,13 @@ class GoalPostSpec:
     position: tuple[float, float, float]
 
 
+@dataclass(frozen=True)
+class GoalAssetSpec:
+    name: str
+    position: tuple[float, float, float]
+    orientation: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+
+
 def build_field_line_specs(field: SoccerFieldConfig, line_height: float = 0.01, z_offset: float = 0.005) -> list[FieldLineSpec]:
     """Build thin cuboid line segments to mimic soccerLab's field-line rendering."""
 
@@ -235,4 +242,14 @@ def build_goal_post_specs(field: SoccerFieldConfig) -> list[GoalPostSpec]:
         GoalPostSpec("right_post_1", post_size, (half_length, goal_width * 0.5, post_z)),
         GoalPostSpec("right_post_2", post_size, (half_length, -goal_width * 0.5, post_z)),
         GoalPostSpec("right_crossbar", crossbar_size, (half_length, 0.0, height)),
+    ]
+
+
+def build_goal_asset_specs(field: SoccerFieldConfig, z_offset: float = 0.0) -> list[GoalAssetSpec]:
+    """Build left/right goal asset poses from a single right-goal USD asset."""
+
+    half_length = field.field_length * 0.5
+    return [
+        GoalAssetSpec("left_goal_asset", (-half_length, 0.0, z_offset), (0.0, 0.0, 0.0, 1.0)),
+        GoalAssetSpec("right_goal_asset", (half_length, 0.0, z_offset), (1.0, 0.0, 0.0, 0.0)),
     ]

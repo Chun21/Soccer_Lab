@@ -29,6 +29,7 @@ from ..soccer_single_g1.g1_motion_policy import (
 
 _REPO_ROOT = Path(__file__).resolve().parents[6]
 _UNITREE_RL_POLICY_PATH = str((_REPO_ROOT / "assets" / "g1_comp" / "policies" / "g1_motion.pt").resolve())
+_GOAL_ASSET_PATH = str((_REPO_ROOT / "assets" / "goalpost.usd").resolve())
 
 _UPPER_BODY_HOLD_JOINT_POS: dict[str, float] = {
     "waist_yaw_joint": 0.0,
@@ -196,7 +197,12 @@ class SoccerLabMarlEnvCfg(DirectMARLEnvCfg):
     pitch_base_friction = (1.0, 1.0)
     field_line_height = 0.01
     field_line_z = 0.005
-    spawn_goal_posts = False
+    spawn_goal_posts = True
+    spawn_goal_asset = True
+    goal_asset_path = _GOAL_ASSET_PATH
+    goal_asset_scale = (1.0, 1.0, 1.0)
+    goal_asset_z_offset = 0.0
+    goal_asset_collision_enabled = False
 
     # ball
     spawn_ball = True
