@@ -30,6 +30,7 @@ from ..soccer_single_g1.g1_motion_policy import (
 _REPO_ROOT = Path(__file__).resolve().parents[6]
 _UNITREE_RL_POLICY_PATH = str((_REPO_ROOT / "assets" / "g1_comp" / "policies" / "g1_motion.pt").resolve())
 _GOAL_ASSET_PATH = str((_REPO_ROOT / "assets" / "goalpost.usd").resolve())
+_BALL_ASSET_PATH = str((_REPO_ROOT / "assets" / "ball_asset" / "ball.usd").resolve())
 
 _UPPER_BODY_HOLD_JOINT_POS: dict[str, float] = {
     "waist_yaw_joint": 0.0,
@@ -206,12 +207,14 @@ class SoccerLabMarlEnvCfg(DirectMARLEnvCfg):
 
     # ball
     spawn_ball = True
+    ball_asset_path = _BALL_ASSET_PATH
+    ball_asset_scale = (1.0, 1.0, 1.0)
     ball_cfg: RigidObjectCfg = RigidObjectCfg(
         prim_path="/World/envs/env_.*/Ball",
-        spawn=sim_utils.SphereCfg(
-            radius=0.11,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.95, 0.95, 0.95)),
-            physics_material=sim_utils.RigidBodyMaterialCfg(static_friction=0.8, dynamic_friction=0.6, restitution=0.2),
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=ball_asset_path,
+            scale=ball_asset_scale,
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.43),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=False,
                 disable_gravity=False,
@@ -221,7 +224,6 @@ class SoccerLabMarlEnvCfg(DirectMARLEnvCfg):
                 max_depenetration_velocity=5.0,
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.43),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.11), rot=(1.0, 0.0, 0.0, 0.0)),
     )
